@@ -10,11 +10,32 @@
 // Outside the grader's container, MAKEFUN_BOT_DIR and MAKEFUN_OUTPUT_DIR stand in for /bot and /output:
 //   mkdir -p out && MAKEFUN_BOT_DIR=. MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { copyFileSync, mkdirSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const BOT_DIR = process.env.MAKEFUN_BOT_DIR ?? '/bot';
 const OUTPUT_DIR = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+
+// Check POST.json before handing it over: it has to name one real X post.
+// Catching a placeholder or a typo here beats being refused by the gate
+// later, so anything that is not an X post address stops the run.
+const postText = readFileSync(join(BOT_DIR, 'POST.json'), 'utf8');
+let postData: unknown;
+try {
+  postData = JSON.parse(postText);
+} catch {
+  throw new Error('POST.json is not valid JSON; it must hold an object with a "url" string.');
+}
+const namedUrl =
+  postData !== null && typeof postData === 'object'
+    ? (postData as { url?: unknown }).url
+    : undefined;
+const X_POST_ADDRESS = /^https:\/\/(?:x\.com|twitter\.com)\/[A-Za-z0-9_]+\/status\/[0-9]+$/;
+if (typeof namedUrl !== 'string' || !X_POST_ADDRESS.test(namedUrl)) {
+  throw new Error(
+    `POST.json "url" is not an X post address (expected https://x.com/<handle>/status/<id>), got: ${JSON.stringify(namedUrl)}`,
+  );
+}
 
 mkdirSync(OUTPUT_DIR, { recursive: true });
 try {
